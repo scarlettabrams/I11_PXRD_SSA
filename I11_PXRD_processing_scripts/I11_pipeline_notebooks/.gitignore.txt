@@ -1,0 +1,34 @@
+.gitignore
+ 
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Large raw or processed data files
+*.h5
+*.hdf5
+*.nxs
+*.xy
+*.xlsx
+*.csv
+*.dat
+*.zip
+
+# Temporary / local folders
+.DS_Store
+Thumbs.db
+.env/
+venv/
+*.log
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# Output directories (created by scripts)
+*/output/
+*/results/
