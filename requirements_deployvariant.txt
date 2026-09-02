@@ -1,0 +1,17 @@
+# I11 PXRD Pipeline — Cloud Deploy Variant (app_ssa_V2_deployvariant.py)
+# Scoped to ONLY what this file imports — deliberately excludes PyQt5,
+# qtawesome, and fabio, since those were only needed for the local
+# pyFAI-calib2 GUI launch, which this variant does not use.
+#
+# Streamlit Cloud installs these top-to-bottom; if one fails to build the
+# rest are skipped, so keep this list minimal and avoid GUI/desktop packages.
+
+streamlit>=1.32
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+plotly>=5.20
+h5py>=3.10
+scipy>=1.12
+pybaselines>=1.1
+pyFAI>=2023.1
