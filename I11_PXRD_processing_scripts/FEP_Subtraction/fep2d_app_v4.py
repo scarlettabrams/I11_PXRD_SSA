@@ -47,6 +47,7 @@ import fep2d_pipeline as fp  # noqa: E402
 import fep2d_v3 as fm  # noqa: E402
 
 APP_VERSION = "fep2d_app_v4 / fep2d_pipeline v4 / fep2d_v3 (V2 maths unchanged)"
+MASK_BLUE = "#0A84FF"   # masked pixels in the sorting tab frame view (not used by any data colour map)
 DEFAULT_MASK_TEXT = fp.fmt_ranges(fp.DEFAULT_EXTRA_MASK)        # "5.30-6.10"
 
 st.set_page_config(page_title="2D FEP subtraction (offline)", page_icon="🧪", layout="wide")
@@ -150,8 +151,17 @@ def get_ref(path: str):
     return _load_ref(path, os.path.getmtime(path))
 
 
+def _geom_key(ai, mask_total):
+    """Cache key made from the loaded calibration and mask themselves, never from file paths
+    (a blank or stale path box must not break the ring map)."""
+    g = tuple(round(float(v), 12) for v in (ai.dist, ai.poni1, ai.poni2, ai.rot1, ai.rot2, ai.rot3,
+                                            ai.wavelength or 0.0, ai.pixel1, ai.pixel2))
+    m = np.ascontiguousarray(mask_total[::37, ::41])
+    return g, tuple(mask_total.shape), int(mask_total.sum()), hash(m.tobytes())
+
+
 @st.cache_resource(show_spinner="Building the ring map (once per geometry and mask)...")
-def _ring_map_cached(poni, poni_mt, mask_p, mask_mt, ranges_key, _ai, _mask_total):
+def _ring_map_cached(geom_key, ranges_key, _ai, _mask_total):
     return fm.build_ring_map(_ai, _mask_total.shape, _mask_total)
 
 
@@ -652,9 +662,7 @@ with tab_sub:
             t0 = time.time()
             corr, info = fm.subtract_frame(fr, S["ref"], S["mask_total"], **kw)
             t_sub = time.time() - t0
-            mask_p = clean_path(st.session_state.mask_path)
-            rm = _ring_map_cached(clean_path(st.session_state.poni_path), os.path.getmtime(clean_path(st.session_state.poni_path)),
-                                  mask_p, os.path.getmtime(mask_p) if mask_p else 0, tuple(S["ranges"]),
+            rm = _ring_map_cached(_geom_key(S["ai"], S["mask_total"]), tuple(S["ranges"]),
                                   S["ai"], S["mask_total"])
             t0 = time.time()
             hp = fm.ring_median_subtract(corr, rm)
@@ -1036,21 +1044,23 @@ with tab_sort:
                 cA, cB = st.columns([1, 1.25])
                 with cA:
                     if view_kind.startswith("Spot"):
-                        mp_ = clean_path(st.session_state.mask_path)
-                        pp_ = clean_path(st.session_state.poni_path)
-                        rm_ = _ring_map_cached(pp_, os.path.getmtime(pp_), mp_, os.path.getmtime(mp_) if mp_ else 0, rk, ai_, tm_)
+                        rm_ = _ring_map_cached(_geom_key(ai_, tm_), rk, ai_, tm_)
                         hp_ = fm.ring_median_subtract(fr_, rm_)
                         mad_ = 1.4826 * np.median(np.abs(hp_[valid_] - np.median(hp_[valid_]))) + 1e-9
                         img_, lo_, hi_, cm_ = np.where(tm_, 0, hp_ / mad_), 0, 12, "magma"
-                        ttl_ = "Spot view (noise units)"
+                        ttl_ = "Spot view in noise units (masked = blue)"
                         img_ = block_max(img_, 2)
-                        tmk_ = None
+                        # blue only where all four pixels of a 2x2 block are masked
+                        bm_ = ~block_max((~tm_).astype(np.uint8), 2).astype(bool)
+                        img_ = np.where(bm_, np.nan, img_)
                     else:
                         lo_, hi_ = np.percentile(fr_[valid_], [1, 99.5])
-                        img_, cm_, ttl_, tmk_ = fr_, "gray", "Corrected frame (masked = grey)", tm_
-                        img_ = np.where(tmk_, np.nan, img_)[::2, ::2]
+                        ttl_, cm_ = "Corrected frame (masked = blue)", "gray"
+                        img_ = np.where(tm_, np.nan, fr_)[::2, ::2]
+                    cmap_ = plt.get_cmap(cm_).copy()
+                    cmap_.set_bad(MASK_BLUE)     # masked pixels in a colour no data value can take
                     fig, ax = plt.subplots(figsize=(5.2, 5.2))
-                    ax.imshow(img_, origin="lower", vmin=lo_, vmax=hi_, cmap=cm_)
+                    ax.imshow(img_, origin="lower", vmin=lo_, vmax=hi_, cmap=cmap_)
                     ax.set_title(ttl_, fontsize=10); ax.set_xticks([]); ax.set_yticks([])
                     plt.tight_layout(); _pyplot(fig)
                 with cB:
